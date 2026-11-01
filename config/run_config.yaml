@@ -1,0 +1,145 @@
+# Startup Finder run configuration. Edit before each run; the orchestrator copies it into the run folder.
+version: 3   # 2026-10-30: run profiles, team-fit gate, search budget. Previously v2: 2026-10-09: people-first weights, pan-EU triage, balanced memos, sealed history
+run_mode: full             # pilot | full
+
+scope:
+  investors_per_run: 12           # individual people (see signal_weights)
+  startups_sourced_max: 35
+  startups_triaged_max: 35        # ALL queued deals are triaged, in parallel waves
+  deep_dives_max: 5               # one batch of 5 per run; batch 2 only if batch 1 leaves budget
+  ideas_max: 5                    # Strategist + Red Team for each deep-dive with no KILL_CANDIDATE after A4
+  revise_loops_max: 1
+  deal_recency_days: 270            # early rounds show up late in PitchBook
+  stages: [angel, pre_seed, accelerator, seed]   # Series A and later are excluded
+  sector_lens: null        # sector-agnostic: no preset sector filters
+  countries: [ES, IT, DACH, FR, NORDICS]   # TARGET markets for the European copy (Agents 4–7)
+  sourcing_geography:                 # Phase 1 thesis: US/global → European copycat
+    include: [US, CA, IL, IN, LATAM, APAC, other_non_EU]   # primarily US / Silicon Valley
+    exclude_hq: [EU, UK, CH, NO]       # European-HQ startups are competitors to map (A4), not sources
+  investor_unit: person               # people-first: individual partners and angels, not fund brands
+  persons_per_run: 12
+  deals_per_person_max: 5
+  dach_entry_default: DE
+  nordics_entry_default: SE
+
+pitchbook:
+  mode: live_browser       # live_browser (agent reads pages you are signed in to) | off (public feeds only)
+  human_prompt_approval: true   # approve browser prompts if your Claude app asks
+  on_unavailable: public_feeds   # if PitchBook is unavailable, continue with accelerator feeds and say so
+  agent_javascript: false       # never run scripts on PitchBook pages (L-RULE-003)
+  daily_view_cap: 150      # set to your licence's daily profile-view limit minus a margin; at the cap the run continues on public feeds
+  max_views_per_session: null   # no per-session cap; only the licence daily ceiling above applies
+  min_seconds_between_views: 10   # fixed minimum pacing between page loads
+  max_table_pages_per_profile: 5
+  export_allowed_for_agents: false   # never change: agents never export
+  stop_on: [captcha, rate_limit, unusual_activity, session_expired]
+  log_file: runs/{run_id}/pitchbook_log.md
+
+tool_call_budgets:          # max web/browser calls per agent instance
+  investor_ranker: 150
+  deal_sourcer: 60
+  analyst_triage: 12
+  analyst_deep: 35
+  europe_mapper: 45
+  strategist: 35
+  red_team: 30
+  memo_writer: 5
+  retrospective: 0       # no web access needed
+
+models:                     # Agent tool model per role (cost lever)
+  investor_ranker: opus
+  deal_sourcer: sonnet
+  analyst_triage: sonnet
+  analyst_deep: opus
+  europe_mapper: opus
+  strategist: opus
+  red_team: opus
+  memo_writer: sonnet
+  retrospective: sonnet
+
+freshness:
+  funding_stale_months: 12
+  traction_stale_months: 6
+  country_file_valid_months: 6
+  investor_ranking_valid_months: 3
+
+rules:
+  block_new_run_if_open_test: true   # no new run while an approved 2-week test has no result logged
+  autonomous: true                    # this run: no human stops; CPs decided by fixed rules (see agents/00_orchestrator.md)
+  human_checkpoints: []              # pilot default: [CP1, CP2, CP3]
+  validator_required: true
+
+# ---- v2 additions (2026-10-09) ----
+signal_weights:                     # multiply into the deal signal score; YC batch-standard deals are an artifact of YC's model
+  yc_partner: 0.3
+  seed_partner: 1.0
+  solo_gp: 1.5                      # e.g. Elad Gil, Sarah Smith
+  super_angel: 1.5                  # e.g. Gokul Rajaram
+  operator_angel: 1.5               # e.g. Guillermo Rauch, Lenny Rachitsky, Arash Ferdowsi
+  scout: 0.5
+  role_multiplier: {lead_partner: 1.0, personal_angel: 1.0, board: 1.0, deal_team: 0.7, yc_batch_standard: 0.3}
+  earliness_bonus: {pre_seed: 1.3, seed: 1.0, series_a: 0.6}
+  no_press_bonus: 1.2
+  eu_present_multiplier: 0.7        # company already has EU offices/customers: still shown, ranked lower               # press_found false within 14 days of the round
+  # deal_signal = earliness_bonus x no_press_bonus x SUM over backers(class weight x role multiplier)
+  person_quota: {yc_partner_max: 2, solo_gp_min: 3, angels_min: 5}   # angels = super_angel + operator_angel
+
+queue_rules:                        # enforced by tools/check_queue.py before triage
+  require_description: true         # 100% description rule: one_line from the company's own PitchBook profile or website
+  require_mapping_verified: true    # name + URL + round date/amount cross-checked on the COMPANY page before queueing
+  require_website_or_stealth: true
+
+triage:
+  mode: parallel_all                # every queued deal gets a 1-page triage before any deep dive
+  wave_size: 10                     # concurrent triage agents per wave
+  tool_call_budget: 18
+  pan_eu_markets: [ES, IT, FR, DACH]   # Western Europe combined; never size one country alone
+  tam_min_eur_per_year: 10000000   # legacy deep-dive floor (not used by the default flow)
+  eu_knockout:                      # KILL in triage if an exact localised match exists at scale
+    definition: "same wedge + same buyer, live in >=1 of pan_eu_markets in the local language, AND (>=EUR 5M raised OR >=100 named customers OR >=50 staff), OR the US original already selling in those markets"
+    min_queries: 4                  # >=2 languages, incl. the local-language category term
+  team_fit_gate:                    # KILL (or PIVOT with a software-only vector) when the core needs what the team cannot build
+    kill_if_core_needs: [hardware_manufacturing, wet_lab_or_deep_science, regulated_medical_device, licensed_financial_institution, mostly_human_services]
+  max_searches_per_deal: 3          # web searches (fetches are not capped); protects the per-turn search cap
+  outcomes: [PASS, PIVOT, KILL]     # PIVOT = kill as-is but a named adaptation vector clears both gates
+  shortlist_rule: "PASS (then PIVOT) ordered by deal_signal, then pan-EU TAM floor"
+
+memos:
+  policy: all_evaluated             # balanced 1-page memo for every deep-dived startup, whatever the verdict (GO / PIVOT / KILL)
+  triage_cards_are_memos: true      # triage cards carry Upside + Diagnostic sections for every triaged deal
+  sections: [upside_secret, kill_pivot_diagnostic, kill_criteria, adaptation_vectors]
+
+history:
+  run_id_format: "RUN-YYYYMMDD-HHMM"
+  seal_on_close: true               # tools/seal_run.py; validator fails on any change to a sealed run or its data files
+  data_versioning: "never edit a file from a previous run: write <name>.vN.md with supersedes + change_reason"
+
+
+search_budget:                      # one Claude turn shares ~200 web searches across ALL agents (observed 2026-10-09)
+  per_turn_cap_estimate: 200
+  reserve_for_deep_share: 0.5       # triage may use at most half; deep, Europe, strategist and red team get the rest
+  per_agent: {analyst_deep: 8, europe_mapper: 12, strategist: 6, red_team: 8}
+
+run_profiles:                       # pick one at run start; overrides scope.* and pitchbook budget
+  quick:    {persons: 6,  deals_max: 10, deep_dives_max: 2, ideas_max: 2, pitchbook_views: 20}
+  standard: {persons: 12, deals_max: 35, deep_dives_max: 5, ideas_max: 5, pitchbook_views: 60}
+active_profile: quick
+report_language: en              # default English; user_profile.md can override (e.g. it, es)
+default_analyst: opportunity_lab  # v3: agents/02_opportunity_lab.md; legacy triage/deep path only on request
+
+early_stage_focus:                  # v3.1 (2026-10-30): the tool looks for ideas being born NOW
+  # Selection priority decides WHICH deals get analysed. It does not change card scores.
+  priority_tiers:                   # lower tier = picked first
+    1: [angel, pre_seed, accelerator]
+    2: [seed_young]                 # seed, founded <= 24 months ago, total raised <= USD 5M
+    3: [seed]                       # any other seed: only to fill the run
+  exclude_stages: [series_a, series_b, series_c, later_stage, early_stage_vc]   # PitchBook "Early Stage VC" = Series A/B
+  target_deals: 10
+  target_tier1_share: 0.7           # aim for >= 7 of 10 from tier 1; fill with tier 2, then 3
+  source_priority: [pitchbook, yc, speedrun, spc]   # PitchBook is the differentiator: it comes first within each tier
+  target_pitchbook_share: 0.6       # aim for >= 6 of 10 from PitchBook; public feeds fill the rest
+  relaxed_verification: [angel, pre_seed, accelerator, seed_young]   # name + website suffice; amount/date may be missing
+  public_feeds:                     # secondary: fill the run when PitchBook early deals are not enough
+    - {name: "Y Combinator latest batch", url: "https://www.ycombinator.com/companies?batch=", note: "pick the most recent batch"}
+    - {name: "a16z speedrun", url: "https://speedrun.a16z.com/companies"}
+    - {name: "South Park Commons", url: "https://www.southparkcommons.com/companies"}

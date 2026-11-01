@@ -1,0 +1,19 @@
+# Starter list of US first-cheque investors (public names; verify on PitchBook).
+# The Scout starts here on a fresh install, then keeps its own data/investors/ records.
+# Edit freely: add people whose taste you trust.
+people:
+  - {name: "Charles Hudson", firm: "Precursor Ventures", class: seed_partner, note: "pre-seed specialist fund"}
+  - {name: "Elizabeth Yin", firm: "Hustle Fund", class: seed_partner, note: "pre-seed specialist fund"}
+  - {name: "Eric Bahn", firm: "Hustle Fund", class: seed_partner, note: "pre-seed specialist fund"}
+  - {name: "Gokul Rajaram", firm: "independent", class: super_angel, note: "frequent first cheques"}
+  - {name: "Elad Gil", firm: "independent", class: solo_gp, note: "leads some seeds; many later rounds, so filter by stage"}
+  - {name: "Sarah Smith", firm: "Sarah Smith Fund", class: solo_gp, note: "deals often listed on the fund profile"}
+  - {name: "Lenny Rachitsky", firm: "independent", class: operator_angel}
+  - {name: "Guillermo Rauch", firm: "independent", class: operator_angel}
+  - {name: "Rahul Vohra", firm: "independent", class: operator_angel}
+funds_to_scan:                      # when a fund page lists pre-seed deals better than the partner page
+  - "Precursor Ventures"
+  - "Hustle Fund"
+  - "Afore Capital"
+  - "BoxGroup"
+  - "Pear VC"
