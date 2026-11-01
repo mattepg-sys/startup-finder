@@ -1,0 +1,12 @@
+# personal and licensed data: never commit
+data/
+runs/
+logs/
+eval/
+inbox/
+_to_delete/
+config/user_profile.md
+config/learnings_history/
+*.tmp
+__pycache__/
+.DS_Store
